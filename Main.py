@@ -2,6 +2,7 @@
 
 
 def main():
+    print 'Hello World'
 #TODO: Get Stock Symbols
 
 #TODO: Create Relevant words
