@@ -1,8 +1,8 @@
-
+import QuantitativeAnalyzer
 
 
 def main():
-    print 'Hello World'
+    QuantitativeAnalyzer.PerformAnalysis("microsoft corp")
 #TODO: Get Stock Symbols
 
 #TODO: Create Relevant words

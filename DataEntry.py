@@ -32,7 +32,7 @@ class DataEntry:
         self.marketGrowth = mGrowth
         self.yearGrowth = yGrowth
 
-    
+
 
 
 
