@@ -2,6 +2,7 @@
 #Description: This class will analyze a stock's quantitative aspects and return a list of data entries
 
 from bs4 import BeautifulSoup
+from yahoo_finance import Share
 from TechnicalAnalyzer import TechnicalAnalyzer
 import urllib2
 import datetime
@@ -16,11 +17,10 @@ def PerformAnalysis(companyName):
     rowList, associatedDates = ExtractTablesAndRows(url)
     urlList = ExtractURLList(rowList)
     incomePageUrlList = Extract10List(urlList)
-    revenueList = ExtractRevenueList(incomePageUrlList)
+    #revenueList = ExtractRevenueList(incomePageUrlList)
     #profitList = ExtractProfitList(incomePageUrlList)
-    for rev in revenueList:
-        print rev
 
+    ExtractStockMarketData(associatedDates, companyName)
 
 
 
@@ -43,7 +43,7 @@ def GenerateQuery(companyName):
     return url
 
 def ExtractTablesAndRows(url):
-    MINYEAR = 2006
+    MINYEAR = 2007
     rows = []
     dateStore = []
     date = datetime.datetime.strptime('13 Feb 2015', '%d %b %Y')
@@ -185,3 +185,72 @@ def ExtractProfitList(incomePageList):
         #print today
         #print yesterday
 
+def ExtractMarketData(associatedDates):
+
+    shr = getShare('SPX')
+
+    for date in associatedDates:
+        pastDate = date.replace(year= date.year - 1)
+        print date.year
+        print pastDate.year
+        allDays = shr.get_historical(pastDate.strftime("%Y-%m-%d"), date.strftime("%Y-%m-%d"))
+        firstYearPrice = allDays[0]
+        lastYearPrice = allDays[-1]
+
+        print lastYearPrice['Close']
+        print firstYearPrice['Close']
+
+        return getGrowth(float(lastYearPrice['Close']), float(firstYearPrice['Close']))
+
+def ExtractStockMarketData(associatedDates, companyName):
+
+    shr = getShare(companyName)
+    sp500 = Share('^GSPC')
+
+    stockGrowth = []
+    marketGrowth = []
+    yearGrowth = []
+
+    for date in associatedDates:
+        currentDate = date.strftime("%Y-%m-%d")
+        pastDate = date.replace(year = date.year - 1).strftime("%Y-%m-%d")
+        futureDate = date.replace(year = date.year + 1).strftime("%Y-%m-%d")
+
+        print currentDate
+        print pastDate
+
+        allDays = shr.get_historical(pastDate, currentDate)
+        allsp = sp500.get_historical(pastDate, currentDate)
+        futureDays = shr.get_historical(currentDate, futureDate)
+
+        firstYearPrice = allDays[0]
+        lastYearPrice = allDays[-1]
+        futurePrice = futureDays[0]
+
+        firstSP500 = allsp[0]
+        secondSP500 = allsp[-1]
+
+        print lastYearPrice['Close']
+        print firstYearPrice['Close']
+
+        print firstSP500['Close']
+        print secondSP500['Close']
+
+        stockGrowth.append(getGrowth(float(lastYearPrice['Close']), float(firstYearPrice['Close'])))
+        marketGrowth.append(getGrowth(float(secondSP500['Close']), float(firstSP500['Close'])))
+        yearGrowth.append(getGrowth(float(firstYearPrice['Close']), float(futurePrice['Close'])))
+
+def getShare(companyName):
+    with open("tickers.txt") as companies:
+        for line in companies:
+            companiesArray = line.split("|")
+            cName = companiesArray[1].lower().strip()
+
+            if cName == companyName:
+                return Share(companiesArray[0])
+
+def getGrowth(firstYearPrice, secondYearPrice):
+    difference = secondYearPrice-firstYearPrice
+    growth = difference/firstYearPrice
+    percentGrowth = growth
+    return percentGrowth
