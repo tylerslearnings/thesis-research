@@ -1,0 +1,3 @@
+MSFT|microsoft corp
+BTU|peabody energy corp
+AAPL|apple inc
