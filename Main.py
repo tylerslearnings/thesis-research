@@ -2,7 +2,7 @@ import QuantitativeAnalyzer
 
 
 def main():
-    QuantitativeAnalyzer.PerformAnalysis("peabody energy corp")
+    QuantitativeAnalyzer.PerformAnalysis("apple inc")
 #TODO: Get Stock Symbols
 
 #TODO: Create Relevant words

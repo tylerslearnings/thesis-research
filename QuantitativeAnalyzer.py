@@ -18,10 +18,12 @@ def PerformAnalysis(companyName):
     rowList, associatedDates = ExtractTablesAndRows(url)
     urlList = ExtractURLList(rowList)
     incomePageUrlList = Extract10List(urlList)
-    #revenueList = ExtractRevenueList(incomePageUrlList)
-    #profitList = ExtractProfitList(incomePageUrlList)
+    revenueList = ExtractRevenueList(incomePageUrlList)
+    profitList = ExtractProfitList(incomePageUrlList)
 
-    ExtractStockMarketData(associatedDates, companyName)
+    stockGrowth, dividenGrowth, marketGrowth, yearGrowth = ExtractStockMarketData(associatedDates, companyName)
+
+    return associatedDates, revenueList, profitList, stockGrowth, dividenGrowth, marketGrowth, yearGrowth
 
 
 
@@ -150,41 +152,52 @@ def ExtractProfitList(incomePageList):
     profitList = []
     analyzer = TechnicalAnalyzer()
 
-    pageUrl = incomePageList[0]
+    for pageUrl in incomePageList:
+        htmlText = urllib2.urlopen(pageUrl).read()
+        htmlPage = BeautifulSoup(htmlText, "html.parser")
 
-    htmlText = urllib2.urlopen(pageUrl).read()
-    htmlPage = BeautifulSoup(htmlText, "html.parser")
+        rows = htmlPage.find_all("tr")
+        profitRow = None
+        for row in rows:
+            if len(row.find_all("td")) > 0:
+                profitLabel = row.find_all("td")[0].getText().lower().strip()
 
-    rows = htmlPage.find_all("tr")
-    profitRow = None
-    for row in rows:
-        profitLabel = row.find_all("td")[0].getText().lower().strip()
-
-        if profitLabel != None and analyzer.AnalyzeTerm(profitLabel) == PROFIT:
-            profitRow = row
-            break
-        elif profitLabel != None and analyzer.AnalyzeTerm(profitLabel) == LOSS:
-            profitRow = row
-            break
-
-    if profitRow == None:
-            print 'ERROR'
-    else:
-        tableElements = BeautifulSoup(str(profitRow), "html.parser").find_all("td")
-        today = '';
-        yesterday = '';
-        found = 0
-        for i in range(0, len(tableElements)):
-            if len(tableElements[i].getText()) > 1 and found == 0:
-                today = tableElements[i + 1].getText().strip().replace(',','')
-                found += 1
-
-            elif len(tableElements[i].getText()) > 1 and found == 1:
-                yesterday = tableElements[i + 1].getText().strip().replace(',','')
+            if profitLabel != None and analyzer.AnalyzeTerm(profitLabel) == PROFIT:
+                profitRow = row
+                break
+            elif profitLabel != None and analyzer.AnalyzeTerm(profitLabel) == LOSS:
+                profitRow = row
                 break
 
-        #print today
-        #print yesterday
+        if profitRow == None:
+                print 'ERROR'
+        else:
+            firstNegative = 1
+            secondNegative = 1
+            tableElements = BeautifulSoup(str(profitRow), "html.parser").find_all("td")
+            today = '';
+            yesterday = '';
+            found = 0
+            for i in range(1, len(tableElements)):
+                if len(tableElements[i].getText().strip()) > 1 and found == 0:
+                    today = tableElements[i].getText().strip().replace(',','')
+                    if "(" in today:
+                        firstNegative = -1
+                        today = today.replace("(", "")
+                    print "Today: " + str(today)
+                    found += 1
+
+                elif len(tableElements[i].getText().strip()) > 1 and found == 1:
+                    yesterday = tableElements[i].getText().strip().replace(',','')
+                    if "(" in yesterday:
+                        secondNegative = -1
+                        yesterday = yesterday.replace("(", "")
+                    print "Yesterday: " + str(yesterday)
+                    break
+
+            change = (firstNegative*float(today) - secondNegative*float(yesterday)) / float(yesterday)
+            profitList.append(change)
+    return profitList
 
 def ExtractMarketData(associatedDates):
 
@@ -254,6 +267,8 @@ def ExtractStockMarketData(associatedDates, companyName):
         yearGrowth.append(growthY)
 
     dividends = dividenFind(associatedDates, cr[1:len(cr) - 1])
+
+    return stockGrowth, dividends, marketGrowth, yearGrowth
 
 
 def getShare(companyName):
