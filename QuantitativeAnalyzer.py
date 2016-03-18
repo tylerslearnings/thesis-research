@@ -7,6 +7,8 @@ from TechnicalAnalyzer import TechnicalAnalyzer
 import urllib2
 import datetime
 import csv
+import ystockquote
+from pprint import pprint
 
 
 REVENUE = 'revenue'
@@ -16,14 +18,18 @@ def PerformAnalysis(companyName):
     #Generate Query
     url = GenerateQuery(companyName)
     rowList, associatedDates = ExtractTablesAndRows(url)
+
     urlList = ExtractURLList(rowList)
     incomePageUrlList = Extract10List(urlList)
-    revenueList = ExtractRevenueList(incomePageUrlList)
-    profitList = ExtractProfitList(incomePageUrlList)
 
-    stockGrowth, dividenGrowth, marketGrowth, yearGrowth = ExtractStockMarketData(associatedDates, companyName)
+    revenueList = ExtractRevenueList(companyName, incomePageUrlList)
+    profitList = ExtractProfitList(companyName, incomePageUrlList)
+
+    stockGrowth, dividenGrowth, marketGrowth, yearGrowth = GetStockFundamentels(associatedDates, companyName)
+
 
     return associatedDates, revenueList, profitList, stockGrowth, dividenGrowth, marketGrowth, yearGrowth
+
 
 
 
@@ -79,7 +85,16 @@ def ExtractTablesAndRows(url):
         currentUrl = url + "&start=" + str(count)
         i += 1
 
-    return rows, dateStore
+    i = 0
+    for date in dateStore:
+        if date.year > MINYEAR:
+            i += 1
+        else:
+            break
+
+    newStore = dateStore[0:i]
+    newRows = rows[0:i]
+    return newRows, newStore
 
 def ExtractURLList(rowList):
     baseURL = "http://www.sec.gov"
@@ -107,100 +122,122 @@ def Extract10List(urlList):
 
     return TenQPage
 
-def ExtractRevenueList(incomePageList):
+def ExtractRevenueList(name, incomePageList):
+    print "Revenue"
     revenueList = []
     analyzer = TechnicalAnalyzer()
-
+    j = 0
+    with open(name + "_revenueList.dat") as file:
+        for line in file:
+            j += 1
+            revenueList.append(float(line))
+    file = open(name + "_revenueList.dat", "a+")
     for pageUrl in incomePageList:
-        htmlText = urllib2.urlopen(pageUrl).read()
-        htmlPage = BeautifulSoup(htmlText, "html.parser")
+        if j <= 0:
+            htmlText = urllib2.urlopen(pageUrl).read()
+            htmlPage = BeautifulSoup(htmlText, "html.parser")
 
-        rows = htmlPage.find_all("tr")
-        revenueRow = None
-        for row in rows:
-            if len(row.find_all("td")) > 0:
-                revenueLabel = row.find_all("td")[0].getText().lower().strip()
+            rows = htmlPage.find_all("tr")
+            revenueRow = None
+            for row in rows:
+                if len(row.find_all("td")) > 0:
+                    revenueLabel = row.find_all("td")[0].getText().lower().strip()
 
-                if revenueLabel != None and analyzer.AnalyzeTerm(revenueLabel) == REVENUE:
-                    revenueRow = row
-                    break
+                    if revenueLabel != None and analyzer.AnalyzeTerm(revenueLabel) == REVENUE:
+                        revenueRow = row
+                        break
 
-        if revenueRow == None:
-            print 'ERROR'
+            if revenueRow == None:
+                print 'ERROR'
+            else:
+                print pageUrl
+                tableElements = BeautifulSoup(str(revenueRow), "html.parser").find_all("td")
+                today = '';
+                yesterday = '';
+                found = 0
+                for i in range(1, len(tableElements)):
+                    if len(tableElements[i].getText().strip()) > 1 and found == 0:
+                        today = tableElements[i].getText().strip().replace(',','')
+                        found += 1
+
+                    elif len(tableElements[i].getText().strip()) > 1 and found == 1:
+                        yesterday = tableElements[i].getText().strip().replace(',','')
+                        break
+
+                revenueChange = (float(today) - float(yesterday)) / float(yesterday)
+                print revenueChange
+                file.write(str(revenueChange) + "\n")
+                revenueList.append(revenueChange)
         else:
+            j -= 1
 
-            tableElements = BeautifulSoup(str(revenueRow), "html.parser").find_all("td")
-            today = '';
-            yesterday = '';
-            found = 0
-            for i in range(1, len(tableElements)):
-                if len(tableElements[i].getText().strip()) > 1 and found == 0:
-                    today = tableElements[i].getText().strip().replace(',','')
-                    found += 1
-
-                elif len(tableElements[i].getText().strip()) > 1 and found == 1:
-                    yesterday = tableElements[i].getText().strip().replace(',','')
-                    break
-
-            revenueChange = (float(today) - float(yesterday)) / float(yesterday)
-            revenueList.append(revenueChange)
-
-
+    file.close()
     return revenueList
 
-def ExtractProfitList(incomePageList):
+def ExtractProfitList(name, incomePageList):
+    print "Profit"
     profitList = []
     analyzer = TechnicalAnalyzer()
+    j = 0
+    with open(name + "_profitList.dat") as file:
+        for line in file:
+            j += 1
+            profitList.append(float(line))
 
+    file = open(name + "_profitList.dat", "a+")
     for pageUrl in incomePageList:
-        htmlText = urllib2.urlopen(pageUrl).read()
-        htmlPage = BeautifulSoup(htmlText, "html.parser")
+        if j <= 0:
+            htmlText = urllib2.urlopen(pageUrl).read()
+            htmlPage = BeautifulSoup(htmlText, "html.parser")
 
-        rows = htmlPage.find_all("tr")
-        profitRow = None
-        for row in rows:
-            if len(row.find_all("td")) > 0:
-                profitLabel = row.find_all("td")[0].getText().lower().strip()
+            rows = htmlPage.find_all("tr")
+            profitRow = None
+            for row in rows:
+                if len(row.find_all("td")) > 0:
+                    profitLabel = row.find_all("td")[0].getText().lower().strip()
 
-            if profitLabel != None and analyzer.AnalyzeTerm(profitLabel) == PROFIT:
-                profitRow = row
-                break
-            elif profitLabel != None and analyzer.AnalyzeTerm(profitLabel) == LOSS:
-                profitRow = row
-                break
-
-        if profitRow == None:
-                print 'ERROR'
-        else:
-            firstNegative = 1
-            secondNegative = 1
-            tableElements = BeautifulSoup(str(profitRow), "html.parser").find_all("td")
-            today = '';
-            yesterday = '';
-            found = 0
-            for i in range(1, len(tableElements)):
-                if len(tableElements[i].getText().strip()) > 1 and found == 0:
-                    today = tableElements[i].getText().strip().replace(',','')
-                    if "(" in today:
-                        firstNegative = -1
-                        today = today.replace("(", "")
-                    print "Today: " + str(today)
-                    found += 1
-
-                elif len(tableElements[i].getText().strip()) > 1 and found == 1:
-                    yesterday = tableElements[i].getText().strip().replace(',','')
-                    if "(" in yesterday:
-                        secondNegative = -1
-                        yesterday = yesterday.replace("(", "")
-                    print "Yesterday: " + str(yesterday)
+                if profitLabel != None and analyzer.AnalyzeTerm(profitLabel) == PROFIT:
+                    profitRow = row
+                    break
+                elif profitLabel != None and analyzer.AnalyzeTerm(profitLabel) == LOSS:
+                    profitRow = row
                     break
 
-            change = (firstNegative*float(today) - secondNegative*float(yesterday)) / float(yesterday)
-            profitList.append(change)
+            if profitRow == None:
+                    print 'ERROR'
+            else:
+                firstNegative = 1
+                secondNegative = 1
+                tableElements = BeautifulSoup(str(profitRow), "html.parser").find_all("td")
+                today = '';
+                yesterday = '';
+                found = 0
+                for i in range(1, len(tableElements)):
+                    if len(tableElements[i].getText().strip()) > 1 and found == 0:
+                        today = tableElements[i].getText().strip().replace(',','')
+                        if "(" in today:
+                            firstNegative = -1
+                            today = today.replace("(", "")
+                        print "Today: " + str(today)
+                        found += 1
+
+                    elif len(tableElements[i].getText().strip()) > 1 and found == 1:
+                        yesterday = tableElements[i].getText().strip().replace(',','')
+                        if "(" in yesterday:
+                            secondNegative = -1
+                            yesterday = yesterday.replace("(", "")
+                        print "Yesterday: " + str(yesterday)
+                        break
+
+                change = (firstNegative*float(today) - secondNegative*float(yesterday)) / float(yesterday)
+                file.write(str(change) + "\n")
+                profitList.append(change)
+        else:
+            j -= 1
+    file.close()
     return profitList
 
 def ExtractMarketData(associatedDates):
-
     shr = getShare('SPX')
 
     for date in associatedDates:
@@ -217,16 +254,14 @@ def ExtractMarketData(associatedDates):
         return getGrowth(float(lastYearPrice['Close']), float(firstYearPrice['Close']))
 
 def ExtractStockMarketData(associatedDates, companyName):
-
+    print "Market Data"
     shr = getShare(companyName)
     sp500 = Share('^GSPC')
+    #print shr.get_historical('2014-04-25', '2014-04-29')
 
     stockGrowth = []
     marketGrowth = []
     yearGrowth = []
-    dividends = []
-
-    allDays = None
 
     url = urlBuilder(associatedDates, shr.symbol)
 
@@ -236,6 +271,7 @@ def ExtractStockMarketData(associatedDates, companyName):
     cr = list(reader)
 
     for date in associatedDates:
+
         currentDate = date.strftime("%Y-%m-%d")
         pastDate = date.replace(year = date.year - 1).strftime("%Y-%m-%d")
         futureDate = date.replace(year = date.year + 1).strftime("%Y-%m-%d")
@@ -259,7 +295,7 @@ def ExtractStockMarketData(associatedDates, companyName):
         growthM = getGrowth(float(secondSP500['Close']), float(firstSP500['Close']))
         growthY = getGrowth(float(firstYearPrice['Close']), float(futurePrice['Close']))
 
-        print growthS
+        print str(growthS)
         print growthM
         print growthY
         stockGrowth.append(growthS)
@@ -270,7 +306,6 @@ def ExtractStockMarketData(associatedDates, companyName):
 
     return stockGrowth, dividends, marketGrowth, yearGrowth
 
-
 def getShare(companyName):
     with open("tickers.txt") as companies:
         for line in companies:
@@ -278,7 +313,8 @@ def getShare(companyName):
             cName = companiesArray[1].lower().strip()
 
             if cName == companyName:
-                return Share(companiesArray[0])
+                share = Share(companiesArray[0])
+                return share #Share(companiesArray[0])
 
 def getGrowth(firstYearPrice, secondYearPrice):
     difference = secondYearPrice-firstYearPrice
@@ -309,6 +345,7 @@ def urlBuilder(associatedDates, share):
     return url
 
 def dividenFind(associatedDates, dividenList):
+    print "Dividend"
     dividendTrend = []
     for i in range(0, len(associatedDates)):
         currentChange = False
@@ -365,3 +402,54 @@ def dividenFind(associatedDates, dividenList):
                 dividendTrend.append(currentDividend*100)
 
     return dividendTrend
+
+def getSymbol(companyName):
+    with open("tickers.txt") as companies:
+        for line in companies:
+            companiesArray = line.split("|")
+            cName = companiesArray[1].lower().strip()
+
+            if cName == companyName:
+                return companiesArray[0]
+
+def GetStockFundamentels(associatedDates, name):
+    symbol = getSymbol(name)
+    sP500 = '^GSPC'
+
+    stockGrowth = []
+    marketGrowth = []
+    yearGrowth = []
+
+    url = urlBuilder(associatedDates, symbol)
+    response = urllib2.urlopen(url)
+    reader = csv.reader(response)
+    cr = list(reader)
+
+    for date in associatedDates:
+        currentDate = date.strftime("%Y-%m-%d")
+        pastDate = date.replace(year = date.year - 1).strftime("%Y-%m-%d")
+        futureDate = date.replace(year = date.year + 1).strftime("%Y-%m-%d")
+
+        if date.weekday() == 5 or date.weekday() ==6:
+            currentDate = date - datetime.timedelta(days=3)
+
+        currentYearPrice = float(ystockquote.get_historical_prices(symbol, pastDate, currentDate).items()[-1][1]['Adj Close'])
+        pastYearPrice = float(ystockquote.get_historical_prices(symbol, pastDate, currentDate).items()[0][1]['Adj Close'])
+        futurePrice = float(ystockquote.get_historical_prices(symbol, currentDate, futureDate).items()[-1][1]['Adj Close'])
+        marketPrice = float(ystockquote.get_historical_prices(sP500, pastDate, currentDate).items()[-1][1]['Adj Close'])
+        marketPastPrice = float(ystockquote.get_historical_prices(sP500, pastDate, currentDate).items()[0][1]['Adj Close'])
+
+        futureGrowth = (futurePrice - currentYearPrice) / currentYearPrice
+        if futureGrowth > 0.1:
+            yearGrowth.append(1)
+        else:
+            yearGrowth.append(0)
+
+        currentGrowth = (currentYearPrice - pastYearPrice) / pastYearPrice
+        stockGrowth.append(currentGrowth)
+
+        marketGrowthPrice = (marketPrice - marketPastPrice) / marketPastPrice
+        marketGrowth.append(marketGrowthPrice)
+
+    dividends = dividenFind(associatedDates, cr[1:len(cr) - 1])
+    return stockGrowth, dividends, marketGrowth, yearGrowth
